@@ -1,0 +1,41 @@
+---
+title: "Thesis_Test_Program"
+author: "Joshua Idachaba"
+date: "1/1/2022"
+output: html_document
+---
+#Data
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Current Working Directory
+tryCatch({
+  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+  }, error=function(cond){message(paste("cannot change working directory"))
+})
+
+```
+
+
+
+```{r DataPrep}
+#Packages Used
+library(tensorflow)
+library(tidyverse)
+library(keras)
+library(DataExplorer)
+library()
+summary(cars)
+
+#Import Datasets
+
+```
+
+
+
+```{r test}
+
+```
+
+

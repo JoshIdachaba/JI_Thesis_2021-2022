@@ -1,0 +1,81 @@
+---
+title: "Thesis_Test_Program"
+author: "Joshua Idachaba"
+date: "1/1/2022"
+output: html_document
+---
+#Data
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Current Working Directory
+tryCatch({
+  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+  }, error=function(cond){message(paste("cannot change working directory"))
+})
+
+```
+
+
+
+```{r DataPrep}
+#Packages Used
+library(tensorflow)
+library(tidyverse)
+library(keras)
+library(DataExplorer)
+library(haven)
+library(e1071)
+library(caret)
+library(ISLR)
+library(recipes)
+
+#Import Datasets
+demographics <- read_xpt("DEMO_I.XPT")
+diet_behavior <- read_xpt("DBQ_I.XPT")
+combined <- demographics %>% left_join(diet_behavior, by = "SEQN")
+
+```
+
+
+
+```{r test}
+#KNN
+combined = combined %>% filter(!is.na(combined$CBQ596))
+data_index <- createDataPartition(combined[["CBQ596"]], p = 0.7, list = FALSE)
+
+class(combined$CBQ596)
+
+target_var <- 'CBQ596'
+model_form <- CBQ596 ~ . 
+model_type <- 'knn' # model type 'knn' indicates k-nearest neighbor
+positive_class <- 1  # Indicates observations reported seeing MyPlate
+negative_class <- 2 # Indicates observations reported not seeing MyPlate
+
+data_train <- combined %>% slice(data_index)
+data_test <- combined %>% slice(-data_index)
+
+model_recipe <- recipe(model_form, data = data_train) %>% 
+  step_novel(all_predictors(), -all_numeric()) %>% # This adds a novel factor level if the test data comes with new levels of a factor
+  
+  step_unknown(all_predictors(), -all_numeric()) %>% # This assigns a missing value in a factor variable to 'unknown'
+  
+  step_impute_bag(all_predictors())  %>% 
+  
+  step_dummy(all_nominal(), -all_outcomes()) %>% # This creates dummy variables for each factor except the dependent variable
+  
+  step_zv(all_predictors()) # This removes variables containing only a single value in their domain
+
+
+trControl <- trainControl(method='cv', number = 10, savePredictions = TRUE, classProbs = TRUE)
+
+knn = train(model_recipe, data= data_train, method = model_type, trControl = trControl, tuneLength = 10)
+
+
+#Convolutional Neural Network
+
+
+```
+
+
