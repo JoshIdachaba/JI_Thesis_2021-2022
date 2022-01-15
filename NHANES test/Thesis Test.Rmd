@@ -15,7 +15,7 @@ tryCatch({
   }, error=function(cond){message(paste("cannot change working directory"))
 })
 
-list.files(".", pattern = "*.XPT")
+
 
 ```
 
@@ -32,32 +32,62 @@ library(e1071)
 library(caret)
 library(ISLR)
 library(recipes)
+library(mice)
+library(doParallel)
 
-#Import Datasets
+?mice
+mice
+#Import Demographics dataset to start
 combined <- read_xpt("DEMO_J.XPT")
 
-colnames(combined)
+#Join all data by SEQN
 for (filename in list.files(".", pattern = "*J.XPT")) {
-  if (filename != "DEMO_J.XPT") {
-    print(filename)
+  if (filename == "DBQ_J.XPT"){
     data <- read_xpt(filename)
     combined <- combined %>% left_join(data, by = "SEQN")
   }
 }
 
+#Checking which data sets have the SEQN Identifier column
 for (filename in list.files(".", pattern = "*J.XPT")) {
    data <- read_xpt(filename)
    print(filename)
    print(length(data %>% select(contains("SEQN"))))
 }
 
+#Look at Missing Data
+plot_intro(combined$data)
 ```
 
 
 
 ```{r test}
-#KNN
-combined = combined %>% filter(!is.na(combined$CBQ596))
+#MICE Imputation (mice::mice)
+a <- Sys.time()
+combined <- mice(combined, m = 5, seed = 2022, method = "cart")
+b = Sys.time()
+print(b-a)
+
+
+#MICE Imputation- Parallel (mice::parlmice)
+a <- Sys.time()
+combined_mice <- parlmice(combined, m = 5, seed = 2022, method = "cart", n.core = 7, n.imp.core = 2, cluster.seed = 1995)
+b = Sys.time()
+print(b-a)
+
+ff <- combined_mice$data
+#Note: parlmice allows for parallelization of MICE imputations across multiple cores. For more information on parlmice, you may visit https://www.rdocumentation.org/packages/mice/versions/3.13.0/topics/parlmice or https://www.gerkovink.com/parlMICE/Vignette_parlMICE.html
+
+
+a <- Sys.time()
+combined <- mice(combined, m = 1, seed = 2022, method = "cart")
+b = Sys.time()
+print(b-a)
+
+parl
+
+
+combined = combined %>% mutate(CBQ596 = ifelse(is.na(CBQ596) | CBQ596 == 9, "missing", CBQ596))
 data_index <- createDataPartition(combined[["CBQ596"]], p = 0.7, list = FALSE)
 
 class(combined$CBQ596)
@@ -71,12 +101,13 @@ negative_class <- 2 # Indicates observations reported not seeing MyPlate
 data_train <- combined %>% slice(data_index)
 data_test <- combined %>% slice(-data_index)
 
+#KNN
 model_recipe <- recipe(model_form, data = data_train) %>% 
   step_novel(all_predictors(), -all_numeric()) %>% # This adds a novel factor level if the test data comes with new levels of a factor
   
   step_unknown(all_predictors(), -all_numeric()) %>% # This assigns a missing value in a factor variable to 'unknown'
   
-  step_impute_bag(all_predictors())  %>% 
+  step_impute_knn(all_predictors())  %>% 
   
   step_dummy(all_nominal(), -all_outcomes()) %>% # This creates dummy variables for each factor except the dependent variable
   
@@ -87,6 +118,11 @@ trControl <- trainControl(method='cv', number = 10, savePredictions = TRUE, clas
 
 knn = train(model_recipe, data= data_train, method = model_type, trControl = trControl, tuneLength = 10)
 
+#Decision Tree
+
+#Random Forest
+
+#SVM
 
 #Convolutional Neural Network
 
