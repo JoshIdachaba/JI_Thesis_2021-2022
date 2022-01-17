@@ -75,15 +75,17 @@ summary(combined)
 ```{r test}
 #MICE Imputation (mice::mice)
 a <- Sys.time()
-combined_mice <- mice(combined, m = 5, seed = 2022, method = "cart")
+combined_mice <- mice(combined, m = 5, seed = 2022, method = "cart", maxit = 40)
 b = Sys.time()
+print("MICE")
 print(b-a)
 
 
 #MICE Imputation- Parallel (mice::parlmice)
 a <- Sys.time()
-combined_mice <- parlmice(combined, m = 18, seed = 2022, method = "cart", n.core = 7, n.imp.core = 2, cluster.seed = 1995)
+combined_mice_parallel <- parlmice(combined, m = 18, seed = 2022, method = "cart", n.core = 7, n.imp.core = 2, cluster.seed = 1995, maxit = 40)
 b = Sys.time()
+print("Parallel MICE")
 print(b-a)
 
 artb <- plot_missing(combined_rev)
@@ -107,36 +109,43 @@ set.seed(1995)
 combined_rev <- complete(combined_mice)
 combined_rev <- combined_rev %>% select(-c(SDDSRVYR, RIDSTATR, RIDAGEMN)) 
 combined <- combined_rev
+combined = combined %>% mutate(CBQ596 = ifelse(is.na(CBQ596) | CBQ596 == 9, 2, 1))
+combined$CBQ596 <- as.character(combined$CBQ596)
+combined <- combined %>% mutate_if(is.character, as.factor)
+combined <- combined %>% mutate_if(is.factor, make.names)
+combined <- combined %>% mutate_if(is.character, as.factor)
 data_index <- createDataPartition(combined[["CBQ596"]], p = 0.7, list = FALSE)
 data_train <- combined %>% slice(data_index)
 data_test <- combined %>% slice(-data_index)
 
-class(combined$CBQ596)
 
+
+#KNN
 target_var <- 'CBQ596'
 model_form <- CBQ596 ~ . 
 model_type <- 'knn' # model type 'knn' indicates k-nearest neighbor
 positive_class <- 1  # Indicates observations reported seeing MyPlate
 negative_class <- 2 # Indicates observations reported not seeing MyPlate
 
-
-
-#KNN
 model_recipe <- recipe(model_form, data = data_train) %>% 
   step_novel(all_predictors(), -all_numeric()) %>% # This adds a novel factor level if the test data comes with new levels of a factor
   
   step_unknown(all_predictors(), -all_numeric()) %>% # This assigns a missing value in a factor variable to 'unknown'
-  
-  step_impute_knn(all_predictors())  %>% 
   
   step_dummy(all_nominal(), -all_outcomes()) %>% # This creates dummy variables for each factor except the dependent variable
   
   step_zv(all_predictors()) # This removes variables containing only a single value in their domain
 
 
-trControl <- trainControl(method='cv', number = 10, savePredictions = TRUE, classProbs = TRUE)
+trControl <- trainControl(method='cv', number = 10, savePredictions = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
 
-knn = train(model_recipe, data= data_train, method = model_type, trControl = trControl, tuneLength = 10)
+a <- Sys.time()
+knn_combined = train(model_recipe, data= data_train, method = model_type, trControl = trControl, tuneLength = 10, metric = "ROC")
+b <- Sys.time()
+
+knn_combined
+rf_combined
+svm_combined
 
 #Logistic Regression
 
@@ -152,14 +161,53 @@ model_recipe <- recipe(model_form, data = data_train) %>%
   step_dummy(all_nominal(), -all_outcomes()) %>% 
   step_zv(all_predictors())
 
-trControl <- trainControl(method='cv', number = 10, savePredictions = TRUE, classProbs = TRUE)
+trControl <- trainControl(method='cv', number = 10, savePredictions = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
+a <- Sys.time()
+logReg_combined = train(model_recipe, data= data_train, method = model_type, trControl = trControl, tuneLength = 10, metric = "ROC")
+b <- Sys.time()
 
-log_reg = train(model_recipe, data= data_train, method = model_type, trControl = trControl, tuneLength = 10)
+print(b-a)
+
+logReg_combined
 summary(data_train)
 
 #LASSO Regression
+target_var <- 'CBQ596'
+model_form <- CBQ596 ~ . 
+model_type <- 'glmnet' # model type 'glmnet' indicates either Ridge Regression (alpha = 0) or LASSO (alpha = 1)
+
+model_recipe <- recipe(model_form, data = data_train) %>% 
+  step_novel(all_predictors(), -all_numeric()) %>%
+  step_unknown(all_predictors(), -all_numeric()) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>%
+  step_normalize(all_predictors()) %>%
+  step_zv(all_predictors())
+
+trControl <- trainControl(method = 'cv', number = 10, savePredictions = TRUE, selectionFunction = 'oneSE', summaryFunction = twoClassSummary, classProbs = TRUE)
+
+tGrid <- expand.grid(alpha = c(1), lambda = 10^seq(1, -2, length = 100))
+
+a <- Sys.time()
+lasso_combined <- train(model_recipe, data = data_train, method = model_type, trControl = trControl, tuneGrid = tGrid, metric = "ROC")
+b <- Sys.time()
+
+lasso_combined
+print(b-a)
 
 #Decision Tree
+target_var <- 'CBQ596'
+model_form <- CBQ596 ~ . 
+model_type <- 'rpart' # model type 'glmnet' indicates either Ridge Regression (alpha = 0) or LASSO (alpha = 1)
+
+trControl <- trainControl(method = 'cv', number = 10, savePredictions = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
+
+a <- Sys.time()
+decisionTree_combined <- train(model_recipe, data = data_train, method = model_type, trControl = trControl, metric = 'ROC', tuneLength = 10)
+b <- Sys.time()
+
+print(b-a)
+
+decisionTree_combined
 
 #Random Forest
 set.seed(1995)
@@ -195,8 +243,11 @@ model_recipe <- recipe(model_form, data = data_train) %>%
 # 10-fold cross validation on the training set 
 trControl <- trainControl(method = 'cv', savePredictions = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
 
+tGrid <- expand.grid(mtry = c(1:25))
+
+#Perform Random Forest
 a <- Sys.time()
-rf_combined <- train(model_recipe, data = data_train, method = model_type, trControl = trControl, metric = 'ROC')
+rf_combined <- train(model_recipe, data = data_train, method = model_type, trControl = trControl, tGrid = tGrid, metric = 'ROC')
 b <- Sys.time()
 print(b-a)
 
@@ -215,6 +266,39 @@ rf_combined_probs <- rf_combined %>% predict(data_test, type = "prob")
 rf_combined_roc <- roc(data_test[[target_var]], rf_combined_probs[, positive_class], plot = TRUE, print.auc = TRUE, legacy.axes = TRUE, levels = c(negative_class, positive_class))
 
 #SVM
+
+
+combined_rev <- complete(combined_mice)
+combined_rev <- combined_rev %>% select(-c(SDDSRVYR, RIDSTATR, RIDAGEMN)) 
+combined <- combined_rev
+data_index <- createDataPartition(combined[["CBQ596"]], p = 0.7, list = FALSE)
+data_train <- combined %>% slice(data_index)
+data_test <- combined %>% slice(-data_index)
+
+target_var <- 'CBQ596'
+model_form <- CBQ596 ~ . 
+model_type <- 'svmLinear' # model type 'rf' indicates random forest
+positive_class <- "X1"  # Indicates observations reported seeing MyPlate
+negative_class <- "X2" # Indicates observations reported not seeing MyPlate
+
+trControl <- trainControl(method = 'cv', savePredictions = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
+
+tGrid <- expand.grid(C = c(0.001, 0.01, 0.1, 1,5,10,50))
+
+# note: use standardization when building the model!
+model_recipe <- recipe(model_form, data = data_train) %>% 
+  step_novel(all_predictors(), -all_numeric()) %>%
+  step_unknown(all_predictors(), -all_numeric()) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>% 
+  step_normalize(all_predictors()) %>%
+  step_zv(all_predictors())
+
+a <- Sys.time()
+svm_combined <- train(model_recipe, data = data_train, method = model_type, trControl = trControl, tuneGrid = tGrid, metric = 'ROC')
+b <- Sys.time()
+print(b-a)
+
+svm_combined
 
 #Convolutional Neural Network
 
