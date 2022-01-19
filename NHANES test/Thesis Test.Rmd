@@ -35,6 +35,7 @@ library(recipes)
 library(mice)
 library(doParallel)
 library(pROC)
+library(stringr)
 
 #Start Parallelization
 detectCores() #Check the Number of cores on your computer
@@ -183,6 +184,8 @@ model_recipe <- recipe(model_form, data = data_train) %>%
   step_normalize(all_predictors()) %>%
   step_zv(all_predictors())
 
+model_info <- list(target_var,model_form,)
+
 trControl <- trainControl(method = 'cv', number = 10, savePredictions = TRUE, selectionFunction = 'oneSE', summaryFunction = twoClassSummary, classProbs = TRUE)
 
 tGrid <- expand.grid(alpha = c(1), lambda = 10^seq(1, -2, length = 100))
@@ -194,18 +197,27 @@ b <- Sys.time()
 lasso_combined
 print(b-a)
 
-#Decision Tree
+b[1]
 target_var <- 'CBQ596'
-model_form <- CBQ596 ~ . 
-model_type <- 'rpart' # model type 'glmnet' indicates either Ridge Regression (alpha = 0) or LASSO (alpha = 1)
+  model_form <- CBQ596 ~ .
 
-trControl <- trainControl(method = 'cv', number = 10, savePredictions = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
-
-a <- Sys.time()
-decisionTree_combined <- train(model_recipe, data = data_train, method = model_type, trControl = trControl, metric = 'ROC', tuneLength = 10)
-b <- Sys.time()
-
-print(b-a)
+#Decision Tree
+decisionTree_caret <- function(data_train,model_info,recipe)
+  
+  model_type <- 'rpart' # model type 'glmnet' indicates either Ridge Regression (alpha = 0) or LASSO (alpha = 1)
+  
+  trControl <- trainControl(method = 'cv', number = 10, savePredictions = TRUE, classProbs = TRUE, summaryFunction = twoClassSummary)
+  
+  model_recipe <- recipe(model_form, data = data_train) %>% 
+  step_novel(all_predictors(), -all_numeric()) %>%
+  step_unknown(all_predictors(), -all_numeric()) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>% 
+  step_zv(all_predictors())
+  
+  a <- Sys.time()
+  decisionTree_combined <- train(model_recipe, data = data_train, method = model_type, trControl = trControl, metric = 'ROC', tuneLength = 10)
+  b <- Sys.time()
+  print(b-a)
 
 decisionTree_combined
 
@@ -266,8 +278,6 @@ rf_combined_probs <- rf_combined %>% predict(data_test, type = "prob")
 rf_combined_roc <- roc(data_test[[target_var]], rf_combined_probs[, positive_class], plot = TRUE, print.auc = TRUE, legacy.axes = TRUE, levels = c(negative_class, positive_class))
 
 #SVM
-
-
 combined_rev <- complete(combined_mice)
 combined_rev <- combined_rev %>% select(-c(SDDSRVYR, RIDSTATR, RIDAGEMN)) 
 combined <- combined_rev
@@ -277,7 +287,7 @@ data_test <- combined %>% slice(-data_index)
 
 target_var <- 'CBQ596'
 model_form <- CBQ596 ~ . 
-model_type <- 'svmLinear' # model type 'rf' indicates random forest
+model_type <- 'svmLinear' # model type 'svmLinear' indicates Support Vector Machine (SVM)
 positive_class <- "X1"  # Indicates observations reported seeing MyPlate
 negative_class <- "X2" # Indicates observations reported not seeing MyPlate
 
@@ -290,11 +300,15 @@ model_recipe <- recipe(model_form, data = data_train) %>%
   step_novel(all_predictors(), -all_numeric()) %>%
   step_unknown(all_predictors(), -all_numeric()) %>%
   step_dummy(all_nominal(), -all_outcomes()) %>% 
-  step_normalize(all_predictors()) %>%
   step_zv(all_predictors())
 
 a <- Sys.time()
-svm_combined <- train(model_recipe, data = data_train, method = model_type, trControl = trControl, tuneGrid = tGrid, metric = 'ROC')
+svm_combined <- train(model_recipe, data = data_train, method = model_type,  trControl = trControl,tuneGrid = tGrid , metric = 'ROC')
+b <- Sys.time()
+print(b-a)
+
+a <- Sys.time()
+svm_combined_tLength <- train(model_recipe, data = data_train, method = model_type, trControl = trControl, tuneLength = 50 , metric = 'ROC')
 b <- Sys.time()
 print(b-a)
 
@@ -304,5 +318,39 @@ svm_combined
 
 stopImplicitCluster()
 ```
+```{r correlationAnalysis, echo=FALSE}
+data <- combined_rev
+cor_testing <- cor(data, method = "spearman")
+rownames(cor_testing)
+corrplot::corrplot(cor_testing)
+summary(cor_testing[1,2])
 
+which.names <- function(DF, value){
+   ind <- which(DF > value & DF < 1, arr.ind=TRUE)
+   print(paste(rownames(DF)[ind[,"row"]],  colnames(DF)[ind[,"col"]], sep=', '))
+}
 
+which.names.strCount <- function(DF, i, value){
+   ind <- which(str_count(DF, pattern = i) == value, arr.ind=TRUE)
+   print(DF[ind])
+}
+
+dupe_rows_cols <- function(list) {
+  dupes <- 
+  return()
+}
+
+m <- lapply(a, as.character)
+
+a <- which.names(cor_testing_df, 0.7)
+a <- colnames()
+
+m <- lapply(a, strsplit, split = ", " )
+
+a <- a[-1]
+
+n <- lapply(m,)
+
+which.names(a, str_count("SEQN"))
+print(foreach::foreach(a))
+```
