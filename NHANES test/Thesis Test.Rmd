@@ -37,14 +37,15 @@ library(doParallel)
 library(pROC)
 library(stringr)
 
-#Start Parallelization
-detectCores() #Check the Number of cores on your computer
-num_cores <- 7 #note: you can specify a different number if you want, depending on your preference
-cl <- makePSOCKcluster(num_cores)
-registerDoParallel(cl)
 
-?mice
-mice
+
+#Start Parallelization
+# detectCores() #Check the Number of cores on your computer
+# num_cores <- 7 #note: you can specify a different number if you want, depending on your preference
+# cl <- makePSOCKcluster(num_cores)
+# registerDoParallel(cl)
+
+
 #Import Demographics dataset to start
 demographics <- read_xpt("DEMO_J.XPT")
 diet_behavior <- read_xpt("DBQ_J.XPT")
@@ -73,14 +74,14 @@ summary(combined)
 
 
 
-```{r test}
+```{r MachineLearning}
+library(mice)
 #MICE Imputation (mice::mice)
 a <- Sys.time()
 combined_mice <- mice(combined, m = 5, seed = 2022, method = "cart", maxit = 40)
 b = Sys.time()
 print("MICE")
 print(b-a)
-
 
 #MICE Imputation- Parallel (mice::parlmice)
 a <- Sys.time()
@@ -94,10 +95,6 @@ ff <- combined_mice$data
 #Note: parlmice allows for parallelization of MICE imputations across multiple cores. For more information on parlmice, you may visit https://www.rdocumentation.org/packages/mice/versions/3.13.0/topics/parlmice or https://www.gerkovink.com/parlMICE/Vignette_parlMICE.html
 
 
-a <- Sys.time()
-combined <- mice(combined, m = 1, seed = 2022, method = "cart")
-b = Sys.time()
-print(b-a)
 
 parl
 
@@ -259,6 +256,8 @@ tGrid <- expand.grid(mtry = c(1:25))
 
 #Perform Random Forest
 a <- Sys.time()
+library(caret)
+library(recipes)
 rf_combined <- train(model_recipe, data = data_train, method = model_type, trControl = trControl, tGrid = tGrid, metric = 'ROC')
 b <- Sys.time()
 print(b-a)
@@ -314,7 +313,6 @@ print(b-a)
 
 svm_combined
 
-#Convolutional Neural Network
 
 stopImplicitCluster()
 ```
@@ -353,4 +351,22 @@ n <- lapply(m,)
 
 which.names(a, str_count("SEQN"))
 print(foreach::foreach(a))
+```
+``` {r miceAnalysis, echo=FALSE}
+#MICE Imputation (mice::mice)
+a <- Sys.time()
+combined_mice <- mice(combined, m = 5, seed = 2022, method = "cart", maxit = 40)
+b = Sys.time()
+print("MICE")
+print(b-a)
+
+```
+
+```{r ConvNet, echo = FALSE}
+#Create Tensor from Imputed Dataset
+library(tensorflow)
+a <- Sys.time()
+cRev_tensor <- as_tensor(combined_rev)
+b <- Sys.time()
+
 ```
