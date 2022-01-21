@@ -37,8 +37,12 @@ library(doParallel)
 library(pROC)
 library(stringr)
 
+installr::updateR()
 
+write.csv(combined_rev, "Imputed Dataset-Test.csv")
+install_tensorflow()
 
+get_File
 #Start Parallelization
 # detectCores() #Check the Number of cores on your computer
 # num_cores <- 7 #note: you can specify a different number if you want, depending on your preference
@@ -72,6 +76,12 @@ plot_intro(combined)
 summary(combined)
 ```
 
+```{r miceAnalysis, echo=FALSE}
+
+
+
+
+```
 
 
 ```{r MachineLearning}
@@ -95,23 +105,26 @@ ff <- combined_mice$data
 #Note: parlmice allows for parallelization of MICE imputations across multiple cores. For more information on parlmice, you may visit https://www.rdocumentation.org/packages/mice/versions/3.13.0/topics/parlmice or https://www.gerkovink.com/parlMICE/Vignette_parlMICE.html
 
 
-
-parl
-
+xyplot(combined_mice,CBQ596 ~.,pch=18,cex=1)
+densityplot(CBQ596)
 
 combined = combined %>% mutate(CBQ596 = ifelse(is.na(CBQ596) | CBQ596 == 9, 2, CBQ596))
 combined$CBQ596 = as.factor(combined$CBQ596)
 
-
+#Data Preparation
 set.seed(1995)
 combined_rev <- complete(combined_mice)
 combined_rev <- combined_rev %>% select(-c(SDDSRVYR, RIDSTATR, RIDAGEMN)) 
 combined <- combined_rev
-combined = combined %>% mutate(CBQ596 = ifelse(is.na(CBQ596) | CBQ596 == 9, 2, 1))
-combined$CBQ596 <- as.character(combined$CBQ596)
+combined$CBQ596[combined$CBQ596 %in% c(2,9,NA)] <-0
 combined <- combined %>% mutate_if(is.character, as.factor)
 combined <- combined %>% mutate_if(is.factor, make.names)
 combined <- combined %>% mutate_if(is.character, as.factor)
+combined$SEQN <- as.factor(as.integer(combined$SEQN))
+
+#
+
+#Separation into Training and Test Sets
 data_index <- createDataPartition(combined[["CBQ596"]], p = 0.7, list = FALSE)
 data_train <- combined %>% slice(data_index)
 data_test <- combined %>% slice(-data_index)
@@ -123,7 +136,7 @@ target_var <- 'CBQ596'
 model_form <- CBQ596 ~ . 
 model_type <- 'knn' # model type 'knn' indicates k-nearest neighbor
 positive_class <- 1  # Indicates observations reported seeing MyPlate
-negative_class <- 2 # Indicates observations reported not seeing MyPlate
+negative_class <- 0 # Indicates observations reported not seeing MyPlate
 
 model_recipe <- recipe(model_form, data = data_train) %>% 
   step_novel(all_predictors(), -all_numeric()) %>% # This adds a novel factor level if the test data comes with new levels of a factor
@@ -354,19 +367,212 @@ print(foreach::foreach(a))
 ```
 ``` {r miceAnalysis, echo=FALSE}
 #MICE Imputation (mice::mice)
+library(mice)
 a <- Sys.time()
 combined_mice <- mice(combined, m = 5, seed = 2022, method = "cart", maxit = 40)
 b = Sys.time()
 print("MICE")
 print(b-a)
 
+alp <- head(combined_rev, 5)
+alp_tensor <- as_tensor(alp)
+
 ```
 
-```{r ConvNet, echo = FALSE}
+Create & Evaluate Neural Network Using Train & Test Data as Tensor
+
+Note: As of 1-21-2022, feature_spec() function is not producing an output with dense features, resulting in an error when using both TensorFlow Tensor and data frame inputs. Further investigation of datasets, code, and installed software and packages is needed. 
+
+```{r NeurNetTens, echo = FALSE}
 #Create Tensor from Imputed Dataset
 library(tensorflow)
-a <- Sys.time()
-cRev_tensor <- as_tensor(combined_rev)
-b <- Sys.time()
+library(keras)
+library(tfruns)
+library(tfdatasets)
+library(tidyverse)
+
+
+#Install TensorFlow and Keras (if necessary)
+#install_keras()
+
+#Use below command to check that Tensorflow is installed and operating correctly
+#tf$print(tf$constant("Hello Tensorflow!"))
+
+train_data <- data_train
+test_data <- data_test
+
+
+#SEQN column needs to be converted from numeric to integer, otherwise SEQN = 100000 will be interpreted as 1e+05 in iter_next(), resulting in an InvalidArgumentError
+
+class(train_data$SEQN)
+
+
+
+write.csv(train_data, "train_data.csv", row.names = FALSE)
+write.csv(test_data, "test_data.csv", row.names = FALSE)
+train_dataset <- make_csv_dataset("train_data.csv", field_delim = ",", batch_size = 5, num_epochs = 1)
+test_dataset <- make_csv_dataset("test_data.csv", field_delim = ",", batch_size = 5, num_epochs = 1)
+
+train_dataset %>% 
+  reticulate::as_iterator() %>%
+  reticulate::iter_next() %>%
+  reticulate::py_to_r()
+train_data$CBQ596
+
+spec <- feature_spec(train_dataset, CBQ596 ~ .) %>% # Make sure formula has correct target variable!
+  step_numeric_column(all_numeric(), normalizer_fn = scaler_standard()) %>%
+  step_categorical_column_with_vocabulary_list(all_nominal()) %>%
+  step_indicator_column(all_nominal())
+
+spec <- fit(spec)
+layer <- layer_dense_features(feature_columns = dense_features(spec))
+train_dataset %>% 
+  reticulate::as_iterator() %>% 
+  reticulate::iter_next() %>% 
+  layer()
+
+model <- keras_model_sequential() %>% 
+  layer_dense_features(feature_columns = dense_features(spec)) %>% 
+  layer_dense(units = 128, activation = "relu") %>% 
+  layer_dense(units = 128, activation = "relu") %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+
+model %>% compile(
+  loss = "binary_crossentropy",
+  optimizer = "adam",
+  metrics = "accuracy"
+)
+
+
+model %>% 
+  fit(
+    train_dataset %>% dataset_use_spec(spec) %>% dataset_shuffle(500),
+    epochs = 20,
+    validation_data = test_dataset %>% dataset_use_spec(spec),
+    verbose = 2
+  )
+
+model %>% evaluate(test_dataset %>% dataset_use_spec(spec), verbose = 0)
+
+# As of 1-21-2022, any attempt to add steps to spec results in following error:
+
+#Error in feature_types[i] <- dtype_chr(self$column_types[[which(self$column_names ==  : 
+  #replacement has length zero
+
+#Note (1-21-2022 8AM CST): spec can work with data.frame or Tensorflow objects, as per https://tensorflow.rstudio.com/guide/tfdatasets/feature_spec/, so writing to csv and reinserting using make_csv_dataset() is not necessary
+
+#Interestingly, the above error does not occur when using the train data in data.frame as argument for spec. Perhaps the dataset as a tensorflow object is somehow not a valid input?
+
+#Update: 1-21-2022 11:55AM CST: Answer to above question- Yes, inasmuch as the train and test .csv files both contained a vector of empty name with row indices, which cannot be passed in feature_spec() steps as a valid feature name. Make sure that "row.names = FALSE" is included within write.csv() before running. Furthermore, Tensorflow Tensor datasets are preferred to dataframes when running feature_spec(), as Tensorflow datasets act as iterators.
+
+
+```
+
+Create & Evaluate Neural Network Using Train & Test Data as Data Frame 
+
+Note: As of 1-21-2022, feature_spec() function is not producing an output with dense features, resulting in an error when using both TensorFlow Tensor and data frame inputs. Further investigation of datasets, code, and installed software and packages is needed. 
+
+```{r NeurNetDF, echo=FALSE}
+#Create Tensor from Imputed Dataset
+library(tensorflow)
+library(keras)
+library(tfruns)
+library(tfdatasets)
+library(tfestimators)
+
+#Install TensorFlow and Keras (if necessary)
+install_tensorflow()
+install_keras()
+
+#Training and Test Data
+train_data <- read.csv()
+test_data <- data_test
+
+
+
+#Preprocessing Steps
+spec_df <- feature_spec(train_data, CBQ596 ~ .) 
+spec_df <- spec_df %>% 
+  step_numeric_column(has_type("int32"), normalizer_fn = scaler_standard()) %>%
+  step_categorical_column_with_vocabulary_list(all_nominal()) %>%
+  step_indicator_column(all_nominal())
+
+spec <- fit(spec)
+class(spec)
+layer <- dense_features(spec)
+class(dense_features(spec))
+
+spec_df <- fit(spec_df)
+model <- keras_model_sequential() %>% 
+  layer_dense_features(feature_columns = dense_features(spec_df)) %>% 
+  layer_dense(units = 128, activation = "relu") %>% 
+  layer_dense(units = 128, activation = "relu") %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+
+#As of 1-21-2022 12:02pm CST, we have reverted back to using, as the 
+
+
+```
+
+```{r ExampleSetTens, echo=FALSE}
+TRAIN_DATA_URL <- "https://storage.googleapis.com/tf-datasets/titanic/train.csv"
+TEST_DATA_URL <- "https://storage.googleapis.com/tf-datasets/titanic/eval.csv"
+
+train_file_path <- get_file("train.csv", TRAIN_DATA_URL)
+test_file_path <- get_file("eval.csv", TEST_DATA_URL)
+
+train_dataset <- make_csv_dataset(
+  train_file_path, 
+  field_delim = ",",
+  batch_size = 5, 
+  num_epochs = 1
+)
+
+test_dataset <- train_dataset <- make_csv_dataset(
+  test_file_path, 
+  field_delim = ",",
+  batch_size = 5, 
+  num_epochs = 1
+)
+
+train_dataset %>% 
+  reticulate::as_iterator() %>% 
+  reticulate::iter_next() %>% 
+  reticulate::py_to_r()
+
+spec <- feature_spec(train_dataset, survived ~ .) %>% 
+  step_numeric_column(all_numeric(), normalizer_fn = scaler_standard()) %>% 
+  step_categorical_column_with_vocabulary_list(all_nominal()) %>% 
+  step_indicator_column(all_nominal())
+
+spec <- fit(spec)
+layer <- layer_dense_features(feature_columns = dense_features(spec))
+train_dataset %>% 
+  reticulate::as_iterator() %>% 
+  reticulate::iter_next() %>% 
+  layer()
+
+model <- keras_model_sequential() %>% 
+  layer_dense_features(feature_columns = dense_features(spec)) %>% 
+  layer_dense(units = 128, activation = "relu") %>% 
+  layer_dense(units = 128, activation = "relu") %>% 
+  layer_dense(units = 1, activation = "sigmoid")
+
+model %>% compile(
+  loss = "binary_crossentropy",
+  optimizer = "adam",
+  metrics = "accuracy"
+)
+devtools::install_github("rstudio/reticulate")
+
+model %>% 
+  fit(
+    train_dataset %>% dataset_use_spec(spec) %>% dataset_shuffle(500),
+    epochs = 20,
+    validation_data = test_dataset %>% dataset_use_spec(spec),
+    verbose = 2
+  )
+
+model %>% evaluate(test_dataset %>% dataset_use_spec(spec), verbose = 0)
 
 ```
