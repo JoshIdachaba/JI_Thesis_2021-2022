@@ -77,36 +77,42 @@ summary(combined)
 ```
 
 ```{r miceAnalysis, echo=FALSE}
+library(mice)
+#MICE Imputation (mice::mice)
+a <- Sys.time()
+combined_mice <- mice(combined, m = 5, seed = 2022, method = "cart", maxit = 5)
+b = Sys.time()
+mice_time <- b-a
 
 
+#MICE Imputation- Parallel (mice::parlmice)
+a <- Sys.time()
+combined_mice_parallel <- parlmice(combined, m = 18, seed = 2022, method = "cart", n.core = 7, n.imp.core = 2, cluster.seed = 1995, maxit = 5)
+b = Sys.time()
+parlmice_time <- b-a
 
+print("MICE:", mice_time)
+print("Parallel MICE:",parlmice_time )
+
+
+combined_rev <- complete(combined_mice)
+combined_rev_parallel <- complete(combined_mice_parallel)
+
+artb <- plot_missing(combined_rev)
+ff <- combined_mice$data
+
+xyplot(combined_mice,CBQ596 ~.,pch=18,cex=1)
+densityplot(CBQ596)
 
 ```
 
 
 ```{r MachineLearning}
-library(mice)
-#MICE Imputation (mice::mice)
-a <- Sys.time()
-combined_mice <- mice(combined, m = 5, seed = 2022, method = "cart", maxit = 40)
-b = Sys.time()
-print("MICE")
-print(b-a)
 
-#MICE Imputation- Parallel (mice::parlmice)
-a <- Sys.time()
-combined_mice_parallel <- parlmice(combined, m = 18, seed = 2022, method = "cart", n.core = 7, n.imp.core = 2, cluster.seed = 1995, maxit = 40)
-b = Sys.time()
-print("Parallel MICE")
-print(b-a)
-
-artb <- plot_missing(combined_rev)
-ff <- combined_mice$data
 #Note: parlmice allows for parallelization of MICE imputations across multiple cores. For more information on parlmice, you may visit https://www.rdocumentation.org/packages/mice/versions/3.13.0/topics/parlmice or https://www.gerkovink.com/parlMICE/Vignette_parlMICE.html
 
 
-xyplot(combined_mice,CBQ596 ~.,pch=18,cex=1)
-densityplot(CBQ596)
+
 
 combined = combined %>% mutate(CBQ596 = ifelse(is.na(CBQ596) | CBQ596 == 9, 2, CBQ596))
 combined$CBQ596 = as.factor(combined$CBQ596)
@@ -379,7 +385,7 @@ alp_tensor <- as_tensor(alp)
 
 ```
 
-Create & Evaluate Neural Network Using Train & Test Data as Tensor
+**Create & Evaluate Neural Network Using Train & Test Data as Tensor**
 
 Note: As of 1-21-2022, feature_spec() function is not producing an output with dense features, resulting in an error when using both TensorFlow Tensor and data frame inputs. Further investigation of datasets, code, and installed software and packages is needed. 
 
@@ -390,10 +396,11 @@ library(keras)
 library(tfruns)
 library(tfdatasets)
 library(tidyverse)
-
+install.packages("keras")
 
 #Install TensorFlow and Keras (if necessary)
-#install_keras()
+install_tensorflow()
+install_keras()
 
 #Use below command to check that Tensorflow is installed and operating correctly
 #tf$print(tf$constant("Hello Tensorflow!"))
@@ -467,18 +474,92 @@ model %>% evaluate(test_dataset %>% dataset_use_spec(spec), verbose = 0)
 
 
 ```
+**Create and Evaluate Neural Network using Tensorflow for Python- 1st try**
 
-Create & Evaluate Neural Network Using Train & Test Data as Data Frame 
+ 
+```{python NeurNetTens}
+"Modules Used"
+import tensorflow as tf
+import numpy as np
+import pandas as pd
+from tensorflow.keras import layers
+
+os.listdir(".")
+
+train_data = pd.read_csv("train_data.csv")
+test_data = pd.read_csv("test_data.csv")
+
+train_features = train_data.copy()
+train_labels = train_features.pop("CBQ596")
+
+test_features = test_data.copy()
+
+for name, column in train_features.items():
+  dtype = column.dtype
+  if dtype == object:
+    dtype = tf.string
+  
+for i in range(5):
+  print(i)
+  
+
+model = tf.keras.Sequential([
+  layers.Dense(64),
+  layers.Dense(1)
+])
+
+model.compile(loss = tf.losses.MeanSquaredError(),
+              optimizer = tf.optimizers.Adam())
+
+model.fit(train_features, train_labels, epochs = 10)
+result = model.evaluate(test_features)
+
+"""Note: As of 1-22-2022, the model can be built, but not evaluated, and it gives the following error:
+ValueError: Exception encountered when calling layer "sequential_1" (type Sequential).
+    
+    Input 0 of layer "dense_2" is incompatible with the layer: expected axis -1of input shape to have value 43, but received input with shape (None, 44)
+    
+    This may be similar in nature to the errors encountered in Tensorflow for R, as it includes a NoneType input. Further investigation of the dataset is needed."""
+
+```
+```{r ManagePython}
+
+#Install packages
+reticulate::py_install(c("matplotlib","numpy","pandas"))
+
+```
+
+**Create and Evaluate Neural Network using Tensorflow for Python- 2n try**
+```{python NeurNetTens2}
+import numpy as np
+import tensorflow as tf
+import matplotlib
+import math
+import time
+import sklearn
+import keras
+
+```
+**Create & Evaluate Neural Network Using Train & Test Data as Data Frame**
 
 Note: As of 1-21-2022, feature_spec() function is not producing an output with dense features, resulting in an error when using both TensorFlow Tensor and data frame inputs. Further investigation of datasets, code, and installed software and packages is needed. 
 
+Update 1-21-2022 5:45PM CST - Same error message is showing after a clean reinstall of "reticulate" package from GitHub
 ```{r NeurNetDF, echo=FALSE}
+###################################
 #Create Tensor from Imputed Dataset
+###################################
+
+#Packages Used
 library(tensorflow)
 library(keras)
 library(tfruns)
 library(tfdatasets)
 library(tfestimators)
+library(reticulate)
+
+
+install_python(version = "3.8.10")
 
 #Install TensorFlow and Keras (if necessary)
 install_tensorflow()
@@ -487,7 +568,7 @@ install_keras()
 #Training and Test Data
 train_data <- read.csv()
 test_data <- data_test
-
+reticulate::insta
 
 
 #Preprocessing Steps
@@ -515,6 +596,14 @@ model <- keras_model_sequential() %>%
 ```
 
 ```{r ExampleSetTens, echo=FALSE}
+#Packages Used
+library(tensorflow)
+library(keras)
+library(tfruns)
+library(tfdatasets)
+library(tfestimators)
+
+
 TRAIN_DATA_URL <- "https://storage.googleapis.com/tf-datasets/titanic/train.csv"
 TEST_DATA_URL <- "https://storage.googleapis.com/tf-datasets/titanic/eval.csv"
 
@@ -575,4 +664,6 @@ model %>%
 
 model %>% evaluate(test_dataset %>% dataset_use_spec(spec), verbose = 0)
 
+reticulate_python_versions()
+?reticulate::use_python()
 ```
