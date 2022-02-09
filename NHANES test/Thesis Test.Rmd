@@ -80,7 +80,7 @@ summary(combined)
 library(mice)
 #MICE Imputation (mice::mice)
 a <- Sys.time()
-combined_mice <- mice(combined, m = 5, seed = 2022, method = "cart", maxit = 5)
+combined_mice <- mice(combined, m = 1, seed = 2022, method = "cart", maxit = 1)
 b = Sys.time()
 mice_time <- b-a
 
@@ -101,8 +101,8 @@ combined_rev_parallel <- complete(combined_mice_parallel)
 artb <- plot_missing(combined_rev)
 ff <- combined_mice$data
 
-xyplot(combined_mice,CBQ596 ~.,pch=18,cex=1)
-densityplot(CBQ596)
+xyplot(combined_mice,CBQ596 ~ INDFMPIR,pch=18,cex=1)
+densityplot(combined_mice)
 
 ```
 
@@ -666,4 +666,26 @@ model %>% evaluate(test_dataset %>% dataset_use_spec(spec), verbose = 0)
 
 reticulate_python_versions()
 ?reticulate::use_python()
+
+devtools::install_github("rstudio/reticulate")
+remotes::install_github("rstudio/reticulate")
+```
+
+```{python NLTKtest}
+import nltk
+
+
+
+```
+
+
+```{r setupPython, echo=FALSE}
+Sys.setenv(RETICULATE_PYTHON = "~/.virtualenvs/test/Scripts/python.exe")
+
+reticulate::repl_python("~/.virtualenvs/test/Scripts/python.exe")
+
+reticulate::use_python("/c/Users/Joshua/AppData/Local/Microsoft/WindowsApps/python3")
+library(reticulate)
+virtualenv_create("test2")
+use_virtualenv("test")
 ```
