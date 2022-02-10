@@ -55,7 +55,7 @@ demographics <- read_xpt("DEMO_J.XPT")
 diet_behavior <- read_xpt("DBQ_J.XPT")
 combined <- demographics %>% left_join(diet_behavior[c(1,40)], by = "SEQN")
 
-
+attributes(diet_behavior)
 #Join all data by SEQN
 # for (filename in list.files(".", pattern = "*J.XPT")) {
 #   if (filename == "DBQ_J.XPT"){
