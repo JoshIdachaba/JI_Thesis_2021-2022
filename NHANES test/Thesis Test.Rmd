@@ -689,3 +689,8 @@ library(reticulate)
 virtualenv_create("test2")
 use_virtualenv("test")
 ```
+
+```{r FoodDatabaseTest, echo=FALSE}
+OpenFoodFacts_Product <- read.csv("../Food Database test/OpenFoodFacts/en.openfoodfacts.org.products.csv")
+FoodDataCentral_BrandedFood <- read.csv("../Food Database test/FoodData_Central_csv_2021-10-28/branded_food.csv")
+```
