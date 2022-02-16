@@ -691,6 +691,13 @@ use_virtualenv("test")
 ```
 
 ```{r FoodDatabaseTest, echo=FALSE}
-OpenFoodFacts_Product <- read.csv("../Food Database test/OpenFoodFacts/en.openfoodfacts.org.products.csv")
+library(tidyverse)
+
+OpenFoodFacts_Product <- read.csv("../Food Database test/OpenFoodFacts/en.openfoodfacts.org.products.csv", sep = "\t")
 FoodDataCentral_BrandedFood <- read.csv("../Food Database test/FoodData_Central_csv_2021-10-28/branded_food.csv")
+
+OFF_US_Foods <- OpenFoodFacts_Product %>% filter(countries_en == "United States")
+
+
+
 ```
