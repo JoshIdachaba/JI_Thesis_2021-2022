@@ -3,7 +3,7 @@
 This Repository contains the files used in Joshua Idachaba's Master's thesis. This project involves the analysis of the USDA Global Branded Food Products database (GBFPD) in terms of cosine similarity and readability. This program assumes that you have downloaded the GBFPD as a CSV (**branded_food.csv**) from [FoodData Central.](https://fdc.nal.usda.gov/download-datasets.html)
 
 ## Database
-The [USDA Global Branded Food Product Database (GBFPD)](https://data.nal.usda.gov/dataset/usda-branded-food-products-database) is a USDA database containing information for branded food products. This database **branded_food** dataset is a subset of the Food Product Database containing product information for branded foods sold in the US.
+The [USDA Global Branded Food Product Database (GBFPD)](https://data.nal.usda.gov/dataset/usda-branded-food-products-database) is a USDA database containing information for branded food products, as part of FoodData Central. The October 2021 version of the dataset was downloaded as a .csv file and can be downloaded from [FoodData Central](https://fdc.nal.usda.gov/download-datasets.html) under section "Branded Food".
 
 ## Folders
 ### Test
